@@ -3,6 +3,7 @@ import os
 import datetime as dt
 from sqlalchemy import create_engine
 import json
+import requests
 
 
 def db_info():
@@ -32,7 +33,9 @@ def month_lst():
 def point_day():
     point = dt.datetime.today() - dt.timedelta(days=2)
     point = "".join((str(point.year), "/", str(point.month), "/", str(point.day)))
-    return point
+    yesterday = dt.datetime.today() - dt.timedelta(days=3)
+    yesterday = "".join((str(yesterday.year), "/", str(yesterday.month), "/", str(yesterday.day)))
+    return [point,yesterday]
 
 
 def truncate_table(tb_name):
@@ -41,6 +44,13 @@ def truncate_table(tb_name):
         con.commit()
     except Exception as ex:
         print(ex)
+
+
+def telegram_bot_sendtext(bot_message):
+    bot_token = "1912198854:AAE_1GcC2lex037C5X2vQ-FIoqfN9SMc4dw"
+    bot_chatID = "-569751154"
+    send_text = 'https://api.telegram.org/bot' + bot_token + '/sendMessage?chat_id=' + bot_chatID + '&parse_mode=Markdown&text=' + bot_message
+    requests.get(send_text)
 
 
 def insert_into_sql():
@@ -62,8 +72,8 @@ def insert_into_sql():
                                 df = df.rename(columns={"日期": "日其", "三方名/银行名": "三方银行名"})
                                 df.to_sql('t_报表细錄', con=engine, if_exists='append', index=False, chunksize=1000)
                             except Exception as ex:
-                                print(ex)
-                                log_fail.append("".join((file, "-", month)))
+                                telegram_bot_sendtext("".join((file, key, month)))
+                                telegram_bot_sendtext(str(ex))
                         elif key == "余额表-银行" or key == "余额表-三方":
                             try:
                                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
@@ -86,14 +96,14 @@ def insert_into_sql():
                                              "掉补单": "调补单"})
                                 df.to_sql("t_余额表", con=engine, if_exists='append', index=False, chunksize=1000)
                             except Exception as ex:
-                                print(ex)
-                                thd_fail.append("".join((file, "-", month)))
+                                telegram_bot_sendtext("".join((file, key, month)))
+                                telegram_bot_sendtext(str(ex))
                         else:
                             try:
                                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
                                 df = df.drop(df.index[df[df["项   目"] == "余额表"].index[0]:])
                                 for day in df.columns:
-                                    if day == point_day():
+                                    if day == point_day()[0]:
                                         df = df.loc[:, :day]
                                     else:
                                         df = df
@@ -104,25 +114,28 @@ def insert_into_sql():
                                 merge = pd.concat([sub, dd, amount], axis=1)
                                 merge['盘口名称'] = file.split('.')[0]
                                 merge['其'] = dt.datetime.strptime(month, "%Y-%m")
+                                try:
+                                    if month_lst()[0] == "-".join(point_day()[0].replace("/", "-").split("-")[0:2]) and \
+                                            merge["金额"][merge["日其"] == point_day()[0]][merge["项目"] == "三、利润"].values[
+                                                0] == 0:
+                                        telegram_bot_sendtext("".join((file, month, "未到帐")))
+                                except:
+                                    pass
                                 merge.to_sql("t_日报", con=engine, if_exists='append', index=False, chunksize=1000)
                             except Exception as ex:
-                                print(ex)
-                                day_fail.append("".join((file, "-", month)))
+                                telegram_bot_sendtext("".join((file, key, month)))
+                                telegram_bot_sendtext(str(ex))
                 except Exception as ex:
-                    print(ex)
-                    read_fail.append("".join((file, "-", month)))
+                    telegram_bot_sendtext("".join((file,month)))
+                    telegram_bot_sendtext(str(ex))
                 finally:
                     con.close()
 
 
 def main():
-    global db_info, engine, con, cursor, month_lst, log_fail, thd_fail, day_fail, read_fail
+    global db_info, engine, con, cursor, month_lst
     db_info = db_info()
     engine, con, cursor = connection(db_info["user"], db_info["password"], "localhost", 1433, "testdb")
-    log_fail = []
-    thd_fail = []
-    day_fail = []
-    read_fail = []
     for tablename in ["t_报表细錄", "t_余额表", "t_日报"]:
         truncate_table(tablename)
     insert_into_sql()
