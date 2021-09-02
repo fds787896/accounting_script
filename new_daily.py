@@ -35,7 +35,7 @@ def point_day():
     point = "".join((str(point.year), "/", str(point.month), "/", str(point.day)))
     yesterday = dt.datetime.today() - dt.timedelta(days=3)
     yesterday = "".join((str(yesterday.year), "/", str(yesterday.month), "/", str(yesterday.day)))
-    return [point,yesterday]
+    return [point, yesterday]
 
 
 def truncate_table(tb_name):
@@ -115,7 +115,8 @@ def insert_into_sql():
                                 merge['盘口名称'] = file.split('.')[0]
                                 merge['其'] = dt.datetime.strptime(month, "%Y-%m")
                                 try:
-                                    if month_lst()[0] == "-".join(point_day()[0].replace("/", "-").split("-")[0:2]) and \
+                                    if "".join((str(merge["其"][0].year), "-", str(merge["其"][0].month))) == "-".join(
+                                            point_day()[0].replace("/", "-").split("-")[0:2]) and \
                                             merge["金额"][merge["日其"] == point_day()[0]][merge["项目"] == "三、利润"].values[
                                                 0] == 0:
                                         telegram_bot_sendtext("".join((file, month, "未到帐")))
@@ -126,7 +127,7 @@ def insert_into_sql():
                                 telegram_bot_sendtext("".join((file, key, month)))
                                 telegram_bot_sendtext(str(ex))
                 except Exception as ex:
-                    telegram_bot_sendtext("".join((file,month)))
+                    telegram_bot_sendtext("".join((file, month)))
                     telegram_bot_sendtext(str(ex))
                 finally:
                     con.close()
