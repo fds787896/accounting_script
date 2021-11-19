@@ -53,9 +53,12 @@ def put_data(main_lst, dt_lst, con, path, engine):
         for co in cos:
             if co[-4:] == 'xlsx' and "~$" not in co:
                 try:
-                    tb = pd.read_excel(''.join((path, "\\", month, "\\", co)), sheet_name='三方与银行资料', skiprows=[0])
+                    tb = pd.read_excel(''.join((path, "\\", month, "\\", co)), sheet_name='三方与银行资料', skiprows=[0],
+                                       dtype={"账号": str, "绑定电话": str})
                     tb = tb.loc[:, ~tb.columns.str.contains("^Unnamed")]
                     tb = tb[~tb["简称"].isnull()]
+                    tb["账号"] = tb["账号"].map(lambda x: x.strip(" \t\n\r") if type(x) == str else x)
+                    tb["绑定电话"] = tb["绑定电话"].map(lambda x: x.strip(" \t\n\r") if type(x) == str else x)
                     tb["盘口名称"] = co.split('.')[0]
                     try:
                         tb["价格"] = tb["价格"].mask(tb["价格"].str.contains('.', na=False), None)
