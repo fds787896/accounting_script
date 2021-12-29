@@ -4,7 +4,8 @@ import datetime as dt
 from sqlalchemy import create_engine
 import json
 import requests
-
+import time
+import dateutil.parser as dparser
 
 def db_info():
     with open("config.json", mode="r") as file:
@@ -54,14 +55,32 @@ def telegram_bot_sendtext(bot_message):
 
 
 def insert_into_sql():
+    def third_bank_into_sql(df, file):
+        df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
+        df = df[~df["简称"].isnull()]
+        df["账号"] = df["账号"].map(lambda x: x.strip(" \t\n\r") if type(x) == str else x)
+        df["绑定电话"] = df["绑定电话"].map(lambda x: x.strip(" \t\n\r") if type(x) == str else x)
+        df["盘口名称"] = file.split('.')[0]
+        try:
+            df["价格"] = df["价格"].mask(df["价格"].str.contains('.', na=False), None)
+            df["序号"] = df["序号"].mask(df["序号"].str.contains('.', na=False), None)
+        except:
+            pass
+        df = df.applymap(str).replace({"nan": None, "NaT": None, "None": None}, regex=True)
+        df.columns = ['序号', '类型', '简称', '三方银行名', '户名', '账号', '登入账号', '绑定电话', '开户省', '开户市',
+                      '信用等级',
+                      '价格', '购买日其', '状态', '租用卡银行', '经手人', '摘要', '盘口名称']
+        df["购买日其"] = df["购买日其"].map(lambda x: dparser.parse(x, fuzzy=True) if type(x) == str else None)
+        df.to_sql("third_bank", con=engine, if_exists='append', index=False, chunksize=1000)
+
     for month in month_lst():
         for file in os.listdir(r"Z:\02-帳務\{month}".format(month=month)):
             if file[-4:] == "xlsx" and "~$" not in file:
                 try:
                     dic = pd.read_excel(r"Z:\02-帳務\{month}\{file}".format(month=month, file=file)
                                         , sheet_name=["日报", "充值提现", "收支调整", "费用", "冻结", "借入借出", "借出台湾", "余额表-银行",
-                                                      "余额表-三方"],
-                                        skiprows=[0])
+                                                      "余额表-三方", "三方与银行资料"],
+                                        skiprows=[0], dtype={"账号": str, "绑定电话": str})
                     for key, df in dic.items():
                         if key == "充值提现" or key == "收支调整" or key == "费用" or key == "冻结" or key == "借入借出" or key == "借出台湾":
                             try:
@@ -98,7 +117,7 @@ def insert_into_sql():
                             except Exception as ex:
                                 telegram_bot_sendtext("".join((file, key, month)))
                                 telegram_bot_sendtext(str(ex))
-                        else:
+                        elif key == "日报":
                             try:
                                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
                                 df = df.drop(df.index[df[df["项   目"] == "余额表"].index[0]:])
@@ -126,21 +145,40 @@ def insert_into_sql():
                             except Exception as ex:
                                 telegram_bot_sendtext("".join((file, key, month)))
                                 telegram_bot_sendtext(str(ex))
+                        else:
+                            if month == currentMonth:
+                                try:
+                                    third_bank_into_sql(df, file)
+                                except Exception as ex:
+                                    telegram_bot_sendtext("".join((file, key, month)))
+                                    telegram_bot_sendtext(str(ex))
+                            else:
+                                if file in os.listdir(r"Z:\02-帳務\{currentMonth}".format(currentMonth=currentMonth)):
+                                    pass
+                                else:
+                                    try:
+                                        third_bank_into_sql(df, file)
+                                    except Exception as ex:
+                                        telegram_bot_sendtext("".join((file, key, month)))
+                                        telegram_bot_sendtext(str(ex))
                 except Exception as ex:
                     telegram_bot_sendtext("".join((file, month)))
                     telegram_bot_sendtext(str(ex))
-                finally:
-                    con.close()
 
 
 def main():
-    global db_info, engine, con, cursor, month_lst
+    global db_info, engine, con, cursor, month_lst, currentMonth
     db_info = db_info()
     engine, con, cursor = connection(db_info["user"], db_info["password"], "localhost", 1433, "testdb")
-    for tablename in ["t_报表细錄", "t_余额表", "t_日报"]:
+    currentMonth = dt.datetime.today().strftime("%Y-%m")
+    for tablename in ["t_报表细錄", "t_余额表", "t_日报", "third_bank"]:
         truncate_table(tablename)
     insert_into_sql()
+    con.close()
+    telegram_bot_sendtext("Done")
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    print("--- %s seconds ---" % (time.time() - start_time))
