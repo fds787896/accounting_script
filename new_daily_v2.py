@@ -6,6 +6,8 @@ import json
 import requests
 import time
 import dateutil.parser as dparser
+import re
+
 
 def db_info():
     with open("config.json", mode="r") as file:
@@ -70,7 +72,7 @@ def insert_into_sql():
         df.columns = ['序号', '类型', '简称', '三方银行名', '户名', '账号', '登入账号', '绑定电话', '开户省', '开户市',
                       '信用等级',
                       '价格', '购买日其', '状态', '租用卡银行', '经手人', '摘要', '盘口名称']
-        df["购买日其"] = df["购买日其"].map(lambda x: dparser.parse(x, fuzzy=True) if type(x) == str else None)
+        df["购买日其"] = df["购买日其"].map(lambda x: dparser.parse(x, fuzzy=True) if type(x) == str else x)
         df.to_sql("third_bank", con=engine, if_exists='append', index=False, chunksize=1000)
 
     for month in month_lst():
@@ -166,14 +168,36 @@ def insert_into_sql():
                     telegram_bot_sendtext(str(ex))
 
 
+def InputOperationData(monthFunction):
+    for file in os.listdir(r"Z:\02-帳務\{month}".format(month=monthFunction()[0])):
+        if file[-4:] == "xlsx" and "~$" not in file:
+            try:
+                df = pd.read_excel(r"Z:\02-帳務\{month}\{file}".format(month=monthFunction()[0], file=file), skiprows=[0],
+                                   sheet_name="运营信息")
+                df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
+                df = df[pd.to_numeric(df.金额, errors="coerce", downcast="float").notnull()]
+                df["日期"] = df["日期"].map(lambda x: dparser.parser(x, fuzzy=True) if type(x) == str else x)
+                for column in ["单量", "投注额", "金额"]:
+                    df[column] = df[column].map(lambda x: x.replace(",", "") if type(x) == str else x)
+                    df[column] = df[column].map(lambda x: re.findall("\d+\.\d+", x)[0] if type(x) == str else x)
+                    df[column] = pd.to_numeric(df[column], errors="coerce")
+                df['盘口名称'] = file.split('.')[0]
+                df['其'] = dt.datetime.strptime(monthFunction()[0], "%Y-%m")
+                df.to_sql('t_OperationInfo', con=engine, if_exists='append', index=False, chunksize=1000)
+            except Exception as ex:
+                telegram_bot_sendtext(file)
+                telegram_bot_sendtext(str(ex))
+
+
 def main():
     global db_info, engine, con, cursor, month_lst, currentMonth
     db_info = db_info()
     engine, con, cursor = connection(db_info["user"], db_info["password"], "localhost", 1433, "testdb")
-    currentMonth = dt.datetime.today().strftime("%Y-%m")
-    for tablename in ["t_报表细錄", "t_余额表", "t_日报", "third_bank"]:
+    currentMonth = "{year}-{month}".format(year=dt.datetime.today().year, month=dt.datetime.today().month)
+    for tablename in ["t_报表细錄", "t_余额表", "t_日报", "third_bank", "t_OperationInfo"]:
         truncate_table(tablename)
     insert_into_sql()
+    InputOperationData(month_lst)
     con.close()
     telegram_bot_sendtext("Done")
 
