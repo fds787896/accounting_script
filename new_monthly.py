@@ -102,7 +102,7 @@ def insert_into(co):
                         values[column] = pd.to_numeric(values[column], errors="coerce")
                     values['盘口名称'] = co.split('.')[0]
                     values['其'] = dt.datetime.strptime(point_date, "%Y-%m")
-                    values.to_sql('t_OperationInfo', con=engine, if_exists='append', index=False,
+                    values.to_sql('p_OperationInfo', con=engine, if_exists='append', index=False,
                                   chunksize=1000)
                 except:
                     operation_fail.append(co.split('.')[0])
