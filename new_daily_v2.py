@@ -7,6 +7,7 @@ import requests
 import time
 import dateutil.parser as dparser
 import re
+import numpy as np
 
 
 def db_info():
@@ -75,6 +76,13 @@ def insert_into_sql():
         df["购买日其"] = df["购买日其"].map(lambda x: dparser.parse(x, fuzzy=True) if type(x) == str else x)
         df.to_sql("third_bank", con=engine, if_exists='append', index=False, chunksize=1000)
 
+    def SplitColumn(df, outputColumn, number):
+        for index, value in enumerate(df["临时摘要"]):
+            try:
+                df[outputColumn][index] = value[number]
+            except:
+                df[outputColumn][index] = np.nan
+
     for month in month_lst():
         for file in os.listdir(r"Z:\02-帳務\{month}".format(month=month)):
             if file[-4:] == "xlsx" and "~$" not in file:
@@ -84,10 +92,60 @@ def insert_into_sql():
                                                       "余额表-三方", "三方与银行资料", "运营信息"],
                                         skiprows=[0], dtype={"账号": str, "绑定电话": str})
                     for key, df in dic.items():
-                        if key == "充值提现" or key == "收支调整" or key == "费用" or key == "冻结" or key == "借入借出" or key == "借出台湾":
+                        if key == "充值提现" or key == "收支调整" or key == "冻结" or key == "借入借出" or key == "借出台湾":
                             try:
                                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
                                 df = df[pd.to_numeric(df.金额, errors="coerce", downcast="float").notnull()]
+                                df['盘口名称'] = file.split('.')[0]
+                                df['其'] = dt.datetime.strptime(month, "%Y-%m")
+                                df = df.rename(columns={"日期": "日其", "三方名/银行名": "三方银行名"})
+                                df.to_sql('t_报表细錄', con=engine, if_exists='append', index=False, chunksize=1000)
+                            except Exception as ex:
+                                telegram_bot_sendtext("".join((file, key, month)))
+                                telegram_bot_sendtext(str(ex))
+                        elif key == "费用":
+                            try:
+                                #the cost df before "2022-03-09"
+                                oldDf = df[df["日期"] < "2022-03-09"]
+                                oldDf = oldDf.loc[:, ~oldDf.columns.str.contains("^Unnamed")]
+                                oldDf = oldDf[pd.to_numeric(oldDf.金额, errors="coerce", downcast="float").notnull()]
+                                #the cost df after  "2022-03-09"
+                                newDf = df[df["日期"] >= "2022-03-09"]
+                                newDf = newDf.loc[:, ~newDf.columns.str.contains("^Unnamed")]
+                                newDf = newDf[pd.to_numeric(newDf.金额, errors="coerce", downcast="float").notnull()]
+                                dfCost = newDf[~newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
+                                dfCost["临时摘要"] = dfCost["摘要"].map(lambda x: x.split("/"))
+                                dfCost[["四级科目", "数量", "单价", "期间", "对象", "备注", "预付", "套餐"]] = np.nan
+                                dfCost = dfCost.reset_index(drop=True)
+                                for number, column in enumerate(["四级科目", "数量", "单价", "期间", "对象", "备注"]):
+                                    SplitColumn(dfCost, column, number)
+                                dfCost["预付"] = ["Y" if type(value) == str and "预付" in value else np.nan for value in
+                                                dfCost["备注"]]
+                                dfCost["套餐"] = ["Y" if type(value) == str and "套餐" in value else np.nan for value in
+                                                dfCost["备注"]]
+                                dfCost["外汇"] = [value.split("*") if type(value) == str and "*" in value else np.nan
+                                                for value in dfCost["备注"]]
+                                dfCost["币别"] = dfCost["外汇"].map(
+                                    lambda x: "".join(re.findall(r'[^(\d+(?:\.\d+)?)]', x[1])) if type(
+                                        x) == list else np.nan)
+                                dfCost["外币金额"] = dfCost["外汇"].map(
+                                    lambda x: re.findall(r'(\d+(?:\.\d+)?)', x[1])[0] if type(
+                                        x) == list else np.nan)
+                                dfCost["汇率"] = dfCost["外汇"].map(
+                                    lambda x: re.findall(r'(\d+(?:\.\d+)?)', x[2])[0] if type(
+                                        x) == list else np.nan)
+                                ###
+                                dfOther = newDf[newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
+                                dfOther["临时摘要"] = dfOther["摘要"].map(lambda x: x.split("/"))
+                                dfOther = dfOther.reset_index(drop=True)
+                                dfOther[["四级科目", "对象", "备注"]] = np.nan
+                                for number, column in enumerate(["四级科目", "对象", "备注"]):
+                                    SplitColumn(dfOther, column, number)
+                                ###
+                                df = pd.concat([dfCost, dfOther, oldDf], axis=0)
+                                df = df.drop(["临时摘要", "外汇"], axis=1)
+                                for column in ["数量", "单价", "期间", "外币金额", "汇率"]:
+                                    df[column] = pd.to_numeric(df[column], errors="coerce")
                                 df['盘口名称'] = file.split('.')[0]
                                 df['其'] = dt.datetime.strptime(month, "%Y-%m")
                                 df = df.rename(columns={"日期": "日其", "三方名/银行名": "三方银行名"})
@@ -184,27 +242,6 @@ def insert_into_sql():
                 except Exception as ex:
                     telegram_bot_sendtext("".join((file, month)))
                     telegram_bot_sendtext(str(ex))
-
-
-# def InputOperationData(monthFunction):
-#     for file in os.listdir(r"Z:\02-帳務\{month}".format(month=monthFunction()[0])):
-#         if file[-4:] == "xlsx" and "~$" not in file:
-#             try:
-#                 df = pd.read_excel(r"Z:\02-帳務\{month}\{file}".format(month=monthFunction()[0], file=file), skiprows=[0],
-#                                    sheet_name="运营信息")
-#                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
-#                 df = df[pd.to_numeric(df.金额, errors="coerce", downcast="float").notnull()]
-#                 df["日期"] = df["日期"].map(lambda x: dparser.parser(x, fuzzy=True) if type(x) == str else x)
-#                 for column in ["单量", "投注额", "金额"]:
-#                     df[column] = df[column].map(lambda x: x.replace(",", "") if type(x) == str else x)
-#                     df[column] = df[column].map(lambda x: re.findall("\d+\.\d+", x)[0] if type(x) == str else x)
-#                     df[column] = pd.to_numeric(df[column], errors="coerce")
-#                 df['盘口名称'] = file.split('.')[0]
-#                 df['其'] = dt.datetime.strptime(monthFunction()[0], "%Y-%m")
-#                 df.to_sql('t_OperationInfo', con=engine, if_exists='append', index=False, chunksize=1000)
-#             except Exception as ex:
-#                 telegram_bot_sendtext(file)
-#                 telegram_bot_sendtext(str(ex))
 
 
 def main():
