@@ -9,6 +9,8 @@ import dateutil.parser as dparser
 import re
 import numpy as np
 
+pd.options.mode.chained_assignment = None
+
 
 def db_info():
     with open("config.json", mode="r") as file:
@@ -58,6 +60,7 @@ def telegram_bot_sendtext(bot_message):
 
 
 def insert_into_sql():
+    #三方与银行资料处理
     def third_bank_into_sql(df, file):
         df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
         df = df[~df["简称"].isnull()]
@@ -76,6 +79,7 @@ def insert_into_sql():
         df["购买日其"] = df["购买日其"].map(lambda x: dparser.parse(x, fuzzy=True) if type(x) == str else x)
         df.to_sql("third_bank", con=engine, if_exists='append', index=False, chunksize=1000)
 
+    # 费用处理(分割column)
     def SplitColumn(df, outputColumn, number):
         for index, value in enumerate(df["临时摘要"]):
             try:
@@ -105,11 +109,11 @@ def insert_into_sql():
                                 telegram_bot_sendtext(str(ex))
                         elif key == "费用":
                             try:
-                                #the cost df before "2022-03-09"
+                                # the cost df before "2022-03-09"
                                 oldDf = df[df["日期"] < "2022-03-09"]
                                 oldDf = oldDf.loc[:, ~oldDf.columns.str.contains("^Unnamed")]
                                 oldDf = oldDf[pd.to_numeric(oldDf.金额, errors="coerce", downcast="float").notnull()]
-                                #the cost df after  "2022-03-09"
+                                # the cost df after  "2022-03-09"
                                 newDf = df[df["日期"] >= "2022-03-09"]
                                 newDf = newDf.loc[:, ~newDf.columns.str.contains("^Unnamed")]
                                 newDf = newDf[pd.to_numeric(newDf.金额, errors="coerce", downcast="float").notnull()]
@@ -244,6 +248,11 @@ def insert_into_sql():
                     telegram_bot_sendtext(str(ex))
 
 
+def UpdateSubject():
+    query = "EXEC UpdateLevelFourSubject"
+    cursor.execute(query)
+    con.commit()
+
 def main():
     global db_info, engine, con, cursor, month_lst, currentMonth
     db_info = db_info()
@@ -252,7 +261,7 @@ def main():
     for tablename in ["t_报表细錄", "t_余额表", "t_日报", "third_bank", "t_OperationInfo"]:
         truncate_table(tablename)
     insert_into_sql()
-    # InputOperationData(month_lst)
+    UpdateSubject()
     con.close()
     telegram_bot_sendtext("Done")
 

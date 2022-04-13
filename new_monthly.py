@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 import json
 import dateutil.parser as dparser
 import re
+import numpy as np
 
 
 def db_info():
@@ -34,13 +35,21 @@ def point():
 
 # input data and preprocess data
 def insert_into(co):
+    # 费用处理(分割column)
+    def SplitColumn(df, outputColumn, number):
+        for index, value in enumerate(df["临时摘要"]):
+            try:
+                df[outputColumn][index] = value[number]
+            except:
+                df[outputColumn][index] = np.nan
+
     if co[-4:] == "xlsx" and "~$" not in co:
         dic = pd.read_excel(path + "\\" + point_date + "\\" + co,
                             sheet_name=["日报", "充值提现", "收支调整", "费用", "冻结", "借入借出", "借出台湾", "余额表-银行", "余额表-三方", "运营信息"]
                             , skiprows=[0])
         for key, values in dic.items():
             # 报表细錄
-            if key == "充值提现" or key == "收支调整" or key == "费用" or key == "冻结" or key == "借入借出" or key == "借出台湾":
+            if key == "充值提现" or key == "收支调整" or key == "冻结" or key == "借入借出" or key == "借出台湾":
                 try:
                     values = values.loc[:, ~values.columns.str.contains("^Unnamed")]
                     values = values[pd.to_numeric(values.金额, errors="coerce", downcast="float").notnull()]
@@ -51,6 +60,55 @@ def insert_into(co):
                     values = values.rename(columns={"日期": "日其", "三方名/银行名": "三方银行名"})
                     values.to_sql('p_报表细錄', con=engine, if_exists='append', index=False, chunksize=1000)
                 except:
+                    log_fail.append(co.split('.')[0])
+            elif key == "费用":
+                try:
+                    # the cost df before "2022-03-09"
+                    oldDf = values[values["日期"] < "2022-03-09"]
+                    oldDf = oldDf.loc[:, ~oldDf.columns.str.contains("^Unnamed")]
+                    oldDf = oldDf[pd.to_numeric(oldDf.金额, errors="coerce", downcast="float").notnull()]
+                    # the cost df after  "2022-03-09"
+                    newDf = values[values["日期"] >= "2022-03-09"]
+                    newDf = newDf.loc[:, ~newDf.columns.str.contains("^Unnamed")]
+                    newDf = newDf[pd.to_numeric(newDf.金额, errors="coerce", downcast="float").notnull()]
+                    dfCost = newDf[~newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
+                    dfCost["临时摘要"] = dfCost["摘要"].map(lambda x: x.split("/"))
+                    dfCost[["四级科目", "数量", "单价", "期间", "对象", "备注", "预付", "套餐"]] = np.nan
+                    dfCost = dfCost.reset_index(drop=True)
+                    for number, column in enumerate(["四级科目", "数量", "单价", "期间", "对象", "备注"]):
+                        SplitColumn(dfCost, column, number)
+                    dfCost["预付"] = ["Y" if type(value) == str and "预付" in value else np.nan for value in
+                                    dfCost["备注"]]
+                    dfCost["套餐"] = ["Y" if type(value) == str and "套餐" in value else np.nan for value in
+                                    dfCost["备注"]]
+                    dfCost["外汇"] = [value.split("*") if type(value) == str and "*" in value else np.nan
+                                    for value in dfCost["备注"]]
+                    dfCost["币别"] = dfCost["外汇"].map(
+                        lambda x: "".join(re.findall(r'[^(\d+(?:\.\d+)?)]', x[1])) if type(
+                            x) == list else np.nan)
+                    dfCost["外币金额"] = dfCost["外汇"].map(
+                        lambda x: re.findall(r'(\d+(?:\.\d+)?)', x[1])[0] if type(
+                            x) == list else np.nan)
+                    dfCost["汇率"] = dfCost["外汇"].map(
+                        lambda x: re.findall(r'(\d+(?:\.\d+)?)', x[2])[0] if type(
+                            x) == list else np.nan)
+                    ###
+                    dfOther = newDf[newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
+                    dfOther["临时摘要"] = dfOther["摘要"].map(lambda x: x.split("/"))
+                    dfOther = dfOther.reset_index(drop=True)
+                    dfOther[["四级科目", "对象", "备注"]] = np.nan
+                    for number, column in enumerate(["四级科目", "对象", "备注"]):
+                        SplitColumn(dfOther, column, number)
+                    ###
+                    df = pd.concat([dfCost, dfOther, oldDf], axis=0)
+                    df = df.drop(["临时摘要", "外汇"], axis=1)
+                    for column in ["数量", "单价", "期间", "外币金额", "汇率"]:
+                        df[column] = pd.to_numeric(df[column], errors="coerce")
+                    df['盘口名称'] = co.split('.')[0]
+                    df['其'] = dt.datetime.strptime(point_date, "%Y-%m")
+                    df = df.rename(columns={"日期": "日其", "三方名/银行名": "三方银行名"})
+                    df.to_sql('p_报表细錄', con=engine, if_exists='append', index=False, chunksize=1000)
+                except Exception as ex:
                     log_fail.append(co.split('.')[0])
             elif key == "余额表-银行" or key == "余额表-三方":
                 try:
