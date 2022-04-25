@@ -60,7 +60,7 @@ def telegram_bot_sendtext(bot_message):
 
 
 def insert_into_sql():
-    #三方与银行资料处理
+    # 三方与银行资料处理
     def third_bank_into_sql(df, file):
         df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
         df = df[~df["简称"].isnull()]
@@ -117,6 +117,7 @@ def insert_into_sql():
                                 newDf = df[df["日期"] >= "2022-03-09"]
                                 newDf = newDf.loc[:, ~newDf.columns.str.contains("^Unnamed")]
                                 newDf = newDf[pd.to_numeric(newDf.金额, errors="coerce", downcast="float").notnull()]
+                                newDf["摘要"] = newDf["摘要"].map(lambda x: x.upper() if type(x) == str else x)
                                 dfCost = newDf[~newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
                                 dfCost["临时摘要"] = dfCost["摘要"].map(lambda x: x.split("/"))
                                 dfCost[["四级科目", "数量", "单价", "期间", "对象", "备注", "预付", "套餐"]] = np.nan
@@ -149,6 +150,7 @@ def insert_into_sql():
                                 df = pd.concat([dfCost, dfOther, oldDf], axis=0)
                                 df = df.drop(["临时摘要", "外汇"], axis=1)
                                 for column in ["数量", "单价", "期间", "外币金额", "汇率"]:
+                                    df[column] = df[column].map(lambda x: x.replace(",", "") if type(x) == str else x)
                                     df[column] = pd.to_numeric(df[column], errors="coerce")
                                 df['盘口名称'] = file.split('.')[0]
                                 df['其'] = dt.datetime.strptime(month, "%Y-%m")
@@ -248,10 +250,12 @@ def insert_into_sql():
                     telegram_bot_sendtext(str(ex))
 
 
-def UpdateSubject():
-    query = "EXEC UpdateLevelFourSubject"
-    cursor.execute(query)
-    con.commit()
+def RunProcedure():
+    lst = ["UpdateLevelFourSubject", "UpdateNewAmount", "UpdateNewAmountTlog"]
+    for procedure in lst:
+        cursor.execute("EXEC {procedure}".format(procedure=procedure))
+        con.commit()
+
 
 def main():
     global db_info, engine, con, cursor, month_lst, currentMonth
@@ -261,7 +265,7 @@ def main():
     for tablename in ["t_报表细錄", "t_余额表", "t_日报", "third_bank", "t_OperationInfo"]:
         truncate_table(tablename)
     insert_into_sql()
-    UpdateSubject()
+    RunProcedure()
     con.close()
     telegram_bot_sendtext("Done")
 
