@@ -186,7 +186,7 @@ def insert_into_sql():
                         elif key == "日报":
                             try:
                                 df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
-                                df = df.drop(df.index[df[df["项   目"] == "余额表"].index[0]:])
+                                df = df.drop(df.index[df[df["项   目"] == "九、可分配现金"].index[0]+1:df[df["项   目"] == "坏帐"].index[0]])
                                 for day in df.columns:
                                     if day == point_day()[0]:
                                         df = df.loc[:, :day]

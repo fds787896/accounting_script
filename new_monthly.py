@@ -138,7 +138,7 @@ def insert_into(co):
             elif key == "日报":
                 try:
                     values = values.loc[:, ~values.columns.str.contains("^Unnamed")]
-                    values = values.drop(values.index[values[values["项   目"] == "余额表"].index[0]:])
+                    values = values.drop(values.index[values[values["项   目"] == "九、可分配现金"].index[0]+1:values[values["项   目"] == "坏帐"].index[0]])
                     values = values[~values["项   目"].isnull()]
                     sub = pd.concat([values["项   目"]] * len(values.columns[1:]), ignore_index=True).rename('项目')
                     dd = pd.Series(list(values.columns[1:].repeat(len(values['项   目']))), name='日其')
