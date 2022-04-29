@@ -169,7 +169,7 @@ def insert_into(co):
 
 
 def RunProcedure():
-    lst = ["UpdateNewAmountP", "UpdateNewAmountPlog"]
+    lst = ["UpdateNewAmountP", "UpdateNewAmountPlog", "UpdateNewAmountPbal"]
     for procedure in lst:
         cursor.execute("EXEC {procedure}".format(procedure=procedure))
     con.commit()

@@ -251,7 +251,7 @@ def insert_into_sql():
 
 
 def RunProcedure():
-    lst = ["UpdateLevelFourSubject", "UpdateNewAmount", "UpdateNewAmountTlog"]
+    lst = ["UpdateLevelFourSubject", "UpdateNewAmount", "UpdateNewAmountTlog", "UpdateNewAmountTbal"]
     for procedure in lst:
         cursor.execute("EXEC {procedure}".format(procedure=procedure))
         con.commit()
