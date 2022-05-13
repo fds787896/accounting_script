@@ -8,7 +8,7 @@ call "C:\Program Files\Tableau\Tableau Prep Builder 2021.1\scripts\tableau-prep-
 
 cd /d "C:\Program Files\Tableau\Tableau Server\2021.1\extras\Command Line Utility"
 
-tabcmd login -s ***** -u ***** -p *****
+tabcmd login -s **** -u **** -p ****
 
 tabcmd publish "D:\work\Daily\Hyper\Daily.hyper" -r "DataSource" -n "Daily" -o
 
