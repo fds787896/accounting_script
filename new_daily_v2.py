@@ -119,7 +119,7 @@ def insert_into_sql():
                                 newDf = newDf[pd.to_numeric(newDf.金额, errors="coerce", downcast="float").notnull()]
                                 newDf["摘要"] = newDf["摘要"].map(lambda x: x.upper() if type(x) == str else x)
                                 dfCost = newDf[~newDf["三级科目"].str.contains("系统佣金|被盗刷|保证金")]
-                                dfCost["临时摘要"] = dfCost["摘要"].map(lambda x: x.split("/"))
+                                dfCost["临时摘要"] = dfCost["摘要"].map(lambda x: x.split("/") if type(x) == str else x)
                                 dfCost[["四级科目", "数量", "单价", "期间", "对象", "备注", "预付", "套餐"]] = np.nan
                                 dfCost = dfCost.reset_index(drop=True)
                                 for number, column in enumerate(["四级科目", "数量", "单价", "期间", "对象", "备注"]):
@@ -251,7 +251,7 @@ def insert_into_sql():
 
 
 def RunProcedure():
-    lst = ["UpdateLevelFourSubject", "UpdateNewAmount", "UpdateNewAmountTlog", "UpdateNewAmountTbal", "UpdateNewAmountTop"]
+    lst = ["UpdateNewAmount", "UpdateNewAmountTlog", "UpdateNewAmountTbal", "UpdateNewAmountTop"]
     for procedure in lst:
         cursor.execute("EXEC {procedure}".format(procedure=procedure))
         con.commit()

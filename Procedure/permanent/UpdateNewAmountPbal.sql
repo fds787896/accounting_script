@@ -1,13 +1,12 @@
-USE [testdb]
+USE [david_test]
 GO
 
-/****** Object:  StoredProcedure [dbo].[UpdateNewAmountPbal]    Script Date: 6/6/2022 12:29:42 PM ******/
+/****** Object:  StoredProcedure [dbo].[UpdateNewAmountPbal]    Script Date: 6/15/2022 12:23:36 PM ******/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 ALTER procedure [dbo].[UpdateNewAmountPbal] as 
 set nocount on 

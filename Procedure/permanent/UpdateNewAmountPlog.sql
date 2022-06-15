@@ -1,17 +1,12 @@
-USE [testdb]
+USE [david_test]
 GO
 
-/****** Object:  StoredProcedure [dbo].[UpdateNewAmountPlog]    Script Date: 6/6/2022 12:30:04 PM ******/
+/****** Object:  StoredProcedure [dbo].[UpdateNewAmountPlog]    Script Date: 6/15/2022 12:25:27 PM ******/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-
-
-
 
 ALTER procedure [dbo].[UpdateNewAmountPlog]
 as 
